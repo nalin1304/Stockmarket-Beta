@@ -270,10 +270,12 @@ if 'portfolio' not in st.session_state:
             st.session_state.portfolio = saved_data.get('holdings', {})
             st.session_state.cash = saved_data.get('cash', 100000)
             st.session_state.trade_history = saved_data.get('trade_history', [])
+            st.session_state.total_charges_paid = saved_data.get('total_charges_paid', 0)
     else:
         st.session_state.portfolio = {}
         st.session_state.cash = 100000  
         st.session_state.trade_history = []
+        st.session_state.total_charges_paid = 0
 
 if 'stock_data' not in st.session_state:
     st.session_state.stock_data = {}
@@ -286,6 +288,12 @@ if 'num_stocks' not in st.session_state:
 
 if 'buy_qty_value' not in st.session_state:
     st.session_state.buy_qty_value = 10
+
+if 'total_charges_paid' not in st.session_state:
+    st.session_state.total_charges_paid = 0
+
+if 'ml_model' not in st.session_state:
+    st.session_state.ml_model = None
 
 st.markdown("""
 <div class="main-header">
@@ -342,6 +350,13 @@ with st.spinner("🔄 Fetching live market data from NSE..."):
     if not st.session_state.stock_data:
         stock_data_temp = {}
         symbols_to_fetch = NIFTY_STOCKS[:num_stocks]
+        
+        # IMPORTANT: Always include portfolio stocks even if not in current analysis range
+        portfolio_symbols = [f"{sym}.NS" for sym in st.session_state.portfolio.keys()]
+        for psym in portfolio_symbols:
+            if psym not in symbols_to_fetch:
+                symbols_to_fetch.append(psym)
+        
         try:
             # Batch download is MUCH faster than individual requests
             batch_data = yf.download(symbols_to_fetch, period="1y", group_by='ticker', progress=False, threads=True)
@@ -503,12 +518,18 @@ for stock in stock_analysis:
             ml_features.append(features)
             ml_targets.append(target)
 
+# Train or reuse cached ML model
 if len(ml_features) > 100:
     X = np.array(ml_features)
     y = np.array(ml_targets)
     
-    ml_model = LinearRegression()
-    ml_model.fit(X, y)
+    # Cache the model to avoid retraining on every interaction
+    if st.session_state.ml_model is None:
+        ml_model = LinearRegression()
+        ml_model.fit(X, y)
+        st.session_state.ml_model = ml_model
+    else:
+        ml_model = st.session_state.ml_model
     
     for i, stock in enumerate(stock_analysis):
         features = [
@@ -877,6 +898,8 @@ with tab3:
         </div>
         """, unsafe_allow_html=True)
     
+    # Show total charges paid
+    st.markdown(f"**💸 Total Charges Paid:** ₹{st.session_state.total_charges_paid:,.2f}")
     st.markdown("---")
     
     st.markdown("### 📦 Current Holdings")
@@ -938,11 +961,13 @@ with tab3:
         st.session_state.portfolio = {}
         st.session_state.cash = 100000
         st.session_state.trade_history = []
+        st.session_state.total_charges_paid = 0
         with open(PORTFOLIO_FILE, 'w') as f:
             json.dump({
                 'holdings': {},
                 'cash': 100000,
-                'trade_history': []
+                'trade_history': [],
+                'total_charges_paid': 0
             }, f)
         st.success("Portfolio reset! Starting fresh with ₹1,00,000")
         st.rerun()
@@ -1021,6 +1046,7 @@ with tab4:
                 if st.button("🟢 BUY NOW", key="buy_btn", type="primary"):
                     if total_cost <= st.session_state.cash:
                         st.session_state.cash -= total_cost
+                        st.session_state.total_charges_paid += total_charges
                         
                         if buy_stock in st.session_state.portfolio:
                             old_qty = st.session_state.portfolio[buy_stock]['quantity']
@@ -1043,7 +1069,8 @@ with tab4:
                         
                         with open(PORTFOLIO_FILE, 'w') as f:
                             json.dump({'holdings': st.session_state.portfolio, 'cash': st.session_state.cash, 
-                                      'trade_history': st.session_state.trade_history}, f)
+                                      'trade_history': st.session_state.trade_history, 
+                                      'total_charges_paid': st.session_state.total_charges_paid}, f)
                         
                         st.success(f"✅ Bought {buy_qty} shares of {buy_stock} @ ₹{selected_stock['Price']:,.2f} (Charges: ₹{total_charges:,.2f})")
                         st.rerun()
@@ -1090,6 +1117,7 @@ with tab4:
                 
                 if st.button("🔴 SELL NOW", key="sell_btn", type="primary"):
                     st.session_state.cash += net_proceeds
+                    st.session_state.total_charges_paid += total_charges
                     
                     if sell_qty >= holding['quantity']:
                         del st.session_state.portfolio[sell_stock]
@@ -1104,7 +1132,8 @@ with tab4:
                     
                     with open(PORTFOLIO_FILE, 'w') as f:
                         json.dump({'holdings': st.session_state.portfolio, 'cash': st.session_state.cash, 
-                                  'trade_history': st.session_state.trade_history}, f)
+                                  'trade_history': st.session_state.trade_history,
+                                  'total_charges_paid': st.session_state.total_charges_paid}, f)
                     
                     st.success(f"✅ Sold {sell_qty} shares of {sell_stock} @ ₹{current_price:,.2f} (Charges: ₹{total_charges:,.2f})")
                     st.rerun()

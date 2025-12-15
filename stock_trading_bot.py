@@ -281,6 +281,12 @@ if 'stock_data' not in st.session_state:
 if 'last_refresh' not in st.session_state:
     st.session_state.last_refresh = None
 
+if 'num_stocks' not in st.session_state:
+    st.session_state.num_stocks = 25
+
+if 'buy_qty_value' not in st.session_state:
+    st.session_state.buy_qty_value = 10
+
 st.markdown("""
 <div class="main-header">
     <h1>🚀 Smart Stock Trading Bot</h1>
@@ -311,7 +317,13 @@ if st.sidebar.button("🔄 Refresh Data", use_container_width=True):
     st.session_state.last_refresh = datetime.now()
     st.rerun()
 
-num_stocks = st.sidebar.slider("📊 Stocks to Analyze", 10, 50, 25)
+num_stocks = st.sidebar.slider("📊 Stocks to Analyze", 10, 50, st.session_state.num_stocks)
+
+# If slider changed, clear cached data to refetch
+if num_stocks != st.session_state.num_stocks:
+    st.session_state.num_stocks = num_stocks
+    st.session_state.stock_data = {}
+    st.rerun()
 
 st.sidebar.markdown("---")
 st.sidebar.markdown("### 💰 Paper Trading Account")
@@ -329,14 +341,30 @@ tab1, tab2, tab3, tab4 = st.tabs([
 with st.spinner("🔄 Fetching live market data from NSE..."):
     if not st.session_state.stock_data:
         stock_data_temp = {}
-        for symbol in NIFTY_STOCKS[:num_stocks]:
-            try:
-                ticker = yf.Ticker(symbol)
-                hist = ticker.history(period="1y")
-                if not hist.empty and len(hist) > 50:
-                    stock_data_temp[symbol] = hist
-            except:
-                pass
+        symbols_to_fetch = NIFTY_STOCKS[:num_stocks]
+        try:
+            # Batch download is MUCH faster than individual requests
+            batch_data = yf.download(symbols_to_fetch, period="1y", group_by='ticker', progress=False, threads=True)
+            for symbol in symbols_to_fetch:
+                try:
+                    if len(symbols_to_fetch) == 1:
+                        hist = batch_data
+                    else:
+                        hist = batch_data[symbol].dropna()
+                    if not hist.empty and len(hist) > 50:
+                        stock_data_temp[symbol] = hist
+                except:
+                    pass
+        except:
+            # Fallback to individual fetch if batch fails
+            for symbol in symbols_to_fetch:
+                try:
+                    ticker = yf.Ticker(symbol)
+                    hist = ticker.history(period="1y")
+                    if not hist.empty and len(hist) > 50:
+                        stock_data_temp[symbol] = hist
+                except:
+                    pass
         st.session_state.stock_data = stock_data_temp
         st.session_state.last_refresh = datetime.now()
 
@@ -970,7 +998,10 @@ with tab4:
             
             max_qty = int(st.session_state.cash / (selected_stock['Price'] * 1.015)) if selected_stock['Price'] > 0 else 0
             if max_qty > 0:
-                buy_qty = st.number_input("Quantity", min_value=1, max_value=max_qty, value=min(10, max_qty), key="buy_qty")
+                # Ensure persisted value is within valid range
+                default_qty = min(max(1, st.session_state.buy_qty_value), max_qty)
+                buy_qty = st.number_input("Quantity", min_value=1, max_value=max_qty, value=default_qty, key="buy_qty")
+                st.session_state.buy_qty_value = buy_qty
                 
                 base_value = buy_qty * selected_stock['Price']
                 stt_charge = base_value * STT_BUY

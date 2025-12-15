@@ -309,20 +309,30 @@ st.markdown("""
 st.sidebar.markdown("## 🎛️ Control Panel")
 st.sidebar.markdown("---")
 
-current_time = datetime.now()
-market_open = current_time.hour >= 9 and current_time.hour < 16
-if current_time.hour == 9 and current_time.minute < 15:
-    market_open = False
-if current_time.hour == 15 and current_time.minute > 30:
-    market_open = False
+import pytz
+ist = pytz.timezone('Asia/Kolkata')
+current_time = datetime.now(ist)
+weekday = current_time.weekday()
+
+market_open = False
+if weekday < 5:
+    if current_time.hour == 9 and current_time.minute >= 15:
+        market_open = True
+    elif current_time.hour > 9 and current_time.hour < 15:
+        market_open = True
+    elif current_time.hour == 15 and current_time.minute <= 30:
+        market_open = True
+
+st.session_state.market_open = market_open
 
 if market_open:
     st.sidebar.markdown("### 🟢 Market Status: **OPEN**")
 else:
     st.sidebar.markdown("### 🔴 Market Status: **CLOSED**")
+    st.sidebar.caption("Trading disabled outside market hours")
 
 st.sidebar.markdown(f"📅 {current_time.strftime('%d %B %Y')}")
-st.sidebar.markdown(f"🕐 {current_time.strftime('%H:%M:%S')}")
+st.sidebar.markdown(f"🕐 {current_time.strftime('%H:%M:%S')} IST")
 st.sidebar.markdown("---")
 
 if st.sidebar.button("🔄 Refresh Data"):

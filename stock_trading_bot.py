@@ -286,7 +286,7 @@ if 'last_refresh' not in st.session_state:
 if 'data_cache_time' not in st.session_state:
     st.session_state.data_cache_time = None
 
-DATA_CACHE_MINUTES = 15  # Only refetch if data is older than this
+DATA_CACHE_MINUTES = 15
 
 if 'num_stocks' not in st.session_state:
     st.session_state.num_stocks = 25

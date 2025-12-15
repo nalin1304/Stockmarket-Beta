@@ -297,6 +297,9 @@ if 'total_charges_paid' not in st.session_state:
 if 'ml_model' not in st.session_state:
     st.session_state.ml_model = None
 
+if 'market_open' not in st.session_state:
+    st.session_state.market_open = False
+
 st.markdown("""
 <div class="main-header">
     <h1>🚀 Smart Stock Trading Bot</h1>
@@ -322,7 +325,7 @@ st.sidebar.markdown(f"📅 {current_time.strftime('%d %B %Y')}")
 st.sidebar.markdown(f"🕐 {current_time.strftime('%H:%M:%S')}")
 st.sidebar.markdown("---")
 
-if st.sidebar.button("🔄 Refresh Data", use_container_width=True):
+if st.sidebar.button("🔄 Refresh Data"):
     st.session_state.stock_data = {}
     st.session_state.data_cache_time = None  # Force refetch
     st.session_state.ml_model = None  # Retrain model with fresh data
@@ -747,7 +750,7 @@ with tab1:
             font={'color': 'white'},
             height=300
         )
-        st.plotly_chart(fig_gauge, use_container_width=True)
+        st.plotly_chart(fig_gauge)
     
     with col2:
         st.markdown("#### 📈 Stock Score Distribution")
@@ -764,7 +767,7 @@ with tab1:
         )
         fig_hist.update_xaxes(gridcolor='rgba(255,255,255,0.1)')
         fig_hist.update_yaxes(gridcolor='rgba(255,255,255,0.1)')
-        st.plotly_chart(fig_hist, use_container_width=True)
+        st.plotly_chart(fig_hist)
     
     st.markdown("---")
     
@@ -780,7 +783,7 @@ with tab1:
         'Signal': s['Signal']
     } for s in stock_analysis])
     
-    st.dataframe(display_df, use_container_width=True, height=400)
+    st.dataframe(display_df, height=400)
 
 with tab2:
     st.markdown("### 🏆 AI-Recommended Top Stocks")
@@ -856,7 +859,7 @@ with tab2:
                 )
                 fig.update_xaxes(gridcolor='rgba(255,255,255,0.1)')
                 fig.update_yaxes(gridcolor='rgba(255,255,255,0.1)')
-                st.plotly_chart(fig, use_container_width=True)
+                st.plotly_chart(fig)
         
         st.markdown("---")
     
@@ -871,7 +874,7 @@ with tab2:
         'Signal': s['Signal']
     } for s in reversed(bottom_5)])
     
-    st.dataframe(avoid_df, use_container_width=True)
+    st.dataframe(avoid_df)
 
 with tab3:
     st.markdown("### 💼 Paper Trading Portfolio")
@@ -956,7 +959,7 @@ with tab3:
         
         if holdings_data:
             holdings_df = pd.DataFrame(holdings_data)
-            st.dataframe(holdings_df, use_container_width=True)
+            st.dataframe(holdings_df)
             
             fig_pie = px.pie(
                 values=[h['Quantity'] * float(h['Current Price'].replace('₹', '').replace(',', '')) for h in holdings_data],
@@ -969,7 +972,7 @@ with tab3:
                 plot_bgcolor='rgba(0,0,0,0)',
                 font={'color': 'white'}
             )
-            st.plotly_chart(fig_pie, use_container_width=True)
+            st.plotly_chart(fig_pie)
     else:
         st.info("📭 No holdings yet. Start trading in the 'Trade Now' tab!")
     
@@ -979,7 +982,7 @@ with tab3:
     
     if st.session_state.trade_history:
         history_df = pd.DataFrame(st.session_state.trade_history)
-        st.dataframe(history_df, use_container_width=True)
+        st.dataframe(history_df)
     else:
         st.info("📭 No trades yet.")
     

@@ -331,7 +331,6 @@ if st.sidebar.button("🔄 Refresh Data", use_container_width=True):
 
 num_stocks = st.sidebar.slider("📊 Stocks to Analyze", 10, 50, st.session_state.num_stocks)
 
-# If slider changed, clear cached data to refetch
 if num_stocks != st.session_state.num_stocks:
     st.session_state.num_stocks = num_stocks
     st.session_state.stock_data = {}
@@ -351,7 +350,6 @@ tab1, tab2, tab3, tab4 = st.tabs([
 ])
 
 with st.spinner("🔄 Fetching live market data from NSE..."):
-    # Check if we need to refetch (cache expired or empty)
     cache_valid = (
         st.session_state.stock_data and 
         st.session_state.data_cache_time and 
@@ -362,17 +360,14 @@ with st.spinner("🔄 Fetching live market data from NSE..."):
         stock_data_temp = {}
         symbols_to_fetch = NIFTY_STOCKS[:num_stocks]
         
-        # Always include portfolio stocks
         portfolio_symbols = [f"{sym}.NS" for sym in st.session_state.portfolio.keys()]
         for psym in portfolio_symbols:
             if psym not in symbols_to_fetch:
                 symbols_to_fetch.append(psym)
         
-        # Show progress
         progress_bar = st.progress(0, text="Downloading stock data...")
         
         try:
-            # Use 6 months instead of 1 year - faster download, still enough for analysis
             progress_bar.progress(10, text="Connecting to Yahoo Finance...")
             batch_data = yf.download(
                 symbols_to_fetch, 
@@ -399,7 +394,6 @@ with st.spinner("🔄 Fetching live market data from NSE..."):
             
         except Exception as e:
             progress_bar.progress(20, text="Batch failed, trying individual stocks...")
-            # Fallback: fetch only essential stocks (top 15 + portfolio)
             essential_symbols = symbols_to_fetch[:15] + [s for s in portfolio_symbols if s not in symbols_to_fetch[:15]]
             for idx, symbol in enumerate(essential_symbols):
                 try:
@@ -554,12 +548,10 @@ for stock in stock_analysis:
             ml_features.append(features)
             ml_targets.append(target)
 
-# Train or reuse cached ML model
 if len(ml_features) > 100:
     X = np.array(ml_features)
     y = np.array(ml_targets)
     
-    # Cache the model to avoid retraining on every interaction
     if st.session_state.ml_model is None:
         ml_model = LinearRegression()
         ml_model.fit(X, y)
@@ -934,7 +926,6 @@ with tab3:
         </div>
         """, unsafe_allow_html=True)
     
-    # Show total charges paid
     st.markdown(f"**💸 Total Charges Paid:** ₹{st.session_state.total_charges_paid:,.2f}")
     st.markdown("---")
     
@@ -1012,6 +1003,10 @@ with tab3:
 with tab4:
     st.markdown("### 📈 Execute Paper Trades")
     
+    if not st.session_state.market_open:
+        st.warning("⚠️ **Market is closed.** Trading is only available during market hours (Mon-Fri, 9:15 AM - 3:30 PM IST).")
+        st.info("📊 You can still view your portfolio and analyze stocks. Paper trading will resume when market opens.")
+    
     acc_col1, acc_col2, acc_col3 = st.columns(3)
     with acc_col1:
         st.markdown(f"""
@@ -1059,14 +1054,11 @@ with tab4:
             
             max_qty = int(st.session_state.cash / (selected_stock['Price'] * 1.015)) if selected_stock['Price'] > 0 else 0
             if max_qty > 0:
-                # Use a unique key per stock to avoid value conflicts when switching stocks
                 qty_key = f"buy_qty_{buy_stock}"
                 
-                # Initialize if not exists or if switching stocks
                 if qty_key not in st.session_state:
                     st.session_state[qty_key] = min(10, max_qty)
                 
-                # Clamp existing value to valid range (in case max_qty changed)
                 if st.session_state[qty_key] > max_qty:
                     st.session_state[qty_key] = max_qty
                 if st.session_state[qty_key] < 1:
@@ -1095,7 +1087,7 @@ with tab4:
                 st.write(f"STT: ₹{stt_charge:,.2f} | Stamp: ₹{stamp_charge:,.2f} | Brokerage+GST: ₹{brokerage + gst_charge:,.2f}")
                 st.success(f"**TOTAL: ₹{total_cost:,.2f}** (Charges: ₹{total_charges:,.2f})")
                 
-                if st.button("🟢 BUY NOW", key="buy_btn", type="primary"):
+                if st.button("🟢 BUY NOW", key="buy_btn", type="primary", disabled=not st.session_state.market_open):
                     if total_cost <= st.session_state.cash:
                         st.session_state.cash -= total_cost
                         st.session_state.total_charges_paid += total_charges
@@ -1167,7 +1159,7 @@ with tab4:
                 st.write(f"Charges - STT: ₹{stt_charge:,.2f} | Brokerage+GST: ₹{brokerage + gst_charge:,.2f} | DP: ₹{dp_charge:,.2f}")
                 st.success(f"**NET PROCEEDS: ₹{net_proceeds:,.2f}** (Charges: ₹{total_charges:,.2f})")
                 
-                if st.button("🔴 SELL NOW", key="sell_btn", type="primary"):
+                if st.button("🔴 SELL NOW", key="sell_btn", type="primary", disabled=not st.session_state.market_open):
                     st.session_state.cash += net_proceeds
                     st.session_state.total_charges_paid += total_charges
                     

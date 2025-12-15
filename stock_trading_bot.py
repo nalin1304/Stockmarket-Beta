@@ -291,9 +291,6 @@ DATA_CACHE_MINUTES = 15  # Only refetch if data is older than this
 if 'num_stocks' not in st.session_state:
     st.session_state.num_stocks = 25
 
-if 'buy_qty_value' not in st.session_state:
-    st.session_state.buy_qty_value = 10
-
 if 'total_charges_paid' not in st.session_state:
     st.session_state.total_charges_paid = 0
 
@@ -1062,10 +1059,26 @@ with tab4:
             
             max_qty = int(st.session_state.cash / (selected_stock['Price'] * 1.015)) if selected_stock['Price'] > 0 else 0
             if max_qty > 0:
-                # Ensure persisted value is within valid range
-                default_qty = min(max(1, st.session_state.buy_qty_value), max_qty)
-                buy_qty = st.number_input("Quantity", min_value=1, max_value=max_qty, value=default_qty, key="buy_qty")
-                st.session_state.buy_qty_value = buy_qty
+                # Use a unique key per stock to avoid value conflicts when switching stocks
+                qty_key = f"buy_qty_{buy_stock}"
+                
+                # Initialize if not exists or if switching stocks
+                if qty_key not in st.session_state:
+                    st.session_state[qty_key] = min(10, max_qty)
+                
+                # Clamp existing value to valid range (in case max_qty changed)
+                if st.session_state[qty_key] > max_qty:
+                    st.session_state[qty_key] = max_qty
+                if st.session_state[qty_key] < 1:
+                    st.session_state[qty_key] = 1
+                
+                buy_qty = st.number_input(
+                    "Quantity", 
+                    min_value=1, 
+                    max_value=max_qty, 
+                    key=qty_key,
+                    help=f"Max you can buy: {max_qty} shares"
+                )
                 
                 base_value = buy_qty * selected_stock['Price']
                 stt_charge = base_value * STT_BUY

@@ -588,73 +588,92 @@ if len(ml_features) > 100:
 
 for i, stock in enumerate(stock_analysis):
     if stock['RSI'] < 30:
-        rsi_score = 100
-    elif stock['RSI'] < 40:
-        rsi_score = 80
-    elif stock['RSI'] < 60:
-        rsi_score = 60
+        rsi_score = 95
+    elif stock['RSI'] < 35:
+        rsi_score = 85
+    elif stock['RSI'] < 45:
+        rsi_score = 70
+    elif stock['RSI'] < 55:
+        rsi_score = 50
+    elif stock['RSI'] < 65:
+        rsi_score = 35
     elif stock['RSI'] < 70:
-        rsi_score = 40
+        rsi_score = 25
     else:
-        rsi_score = 20
+        rsi_score = 15
     
-    if stock['MACD'] > 2:
-        macd_score = 100
+    if stock['MACD'] > 1:
+        macd_score = 90
+    elif stock['MACD'] > 0.5:
+        macd_score = 75
     elif stock['MACD'] > 0:
-        macd_score = 70
-    elif stock['MACD'] > -2:
-        macd_score = 40
+        macd_score = 60
+    elif stock['MACD'] > -0.5:
+        macd_score = 45
+    elif stock['MACD'] > -1:
+        macd_score = 30
     else:
-        macd_score = 20  
+        macd_score = 15
     
     ma_score = 50
-    if stock['Price'] > stock['MA_20'] and stock['Price'] > stock['MA_50']:
-        ma_score = 90
+    if stock['Price'] > stock['MA_20'] and stock['Price'] > stock['MA_50'] and stock['MA_20'] > stock['MA_50']:
+        ma_score = 95
+    elif stock['Price'] > stock['MA_20'] and stock['Price'] > stock['MA_50']:
+        ma_score = 80
     elif stock['Price'] > stock['MA_20']:
-        ma_score = 70
+        ma_score = 60
     elif stock['Price'] > stock['MA_50']:
-        ma_score = 50
+        ma_score = 40
+    elif stock['Price'] < stock['MA_20'] and stock['Price'] < stock['MA_50']:
+        ma_score = 15
     else:
         ma_score = 30
     
     ml_pred = stock.get('ML_Prediction', 0)
-    ml_score = min(100, max(0, 50 + (ml_pred * 10)))  
+    ml_score = min(100, max(0, 50 + (ml_pred * 15)))
     
-    vol_score = min(100, max(0, stock['Volume_Ratio'] * 50))
+    vol_score = min(100, max(20, 30 + stock['Volume_Ratio'] * 35))
     
-    momentum_score = 50 + min(25, max(-25, stock['Change_5D'] * 2))
+    momentum_score = 50 + min(40, max(-40, stock['Change_5D'] * 5))
     
     stoch_k = stock.get('Stoch_K', 50)
     if stoch_k < 20:
-        stoch_score = 100
+        stoch_score = 90
     elif stoch_k < 30:
-        stoch_score = 80
+        stoch_score = 75
+    elif stoch_k < 50:
+        stoch_score = 55
     elif stoch_k < 70:
-        stoch_score = 60
+        stoch_score = 45
     elif stoch_k < 80:
-        stoch_score = 40
+        stoch_score = 30
     else:
-        stoch_score = 20
+        stoch_score = 15
     
     adx = stock.get('ADX', 25)
-    if adx > 40:
-        adx_score = 90
+    trend_up = stock['Price'] > stock['MA_50']
+    if adx > 40 and trend_up:
+        adx_score = 95
+    elif adx > 30 and trend_up:
+        adx_score = 80
+    elif adx > 25 and trend_up:
+        adx_score = 65
+    elif adx > 40 and not trend_up:
+        adx_score = 20
     elif adx > 25:
-        adx_score = 70
-    elif adx > 20:
         adx_score = 50
     else:
-        adx_score = 30
+        adx_score = 40
     
     final_score = (
         0.20 * ml_score +
         0.15 * rsi_score +
         0.15 * macd_score +
-        0.10 * ma_score +      
+        0.15 * ma_score +
         0.10 * vol_score +
         0.10 * momentum_score +
-        0.10 * stoch_score +
-        0.10 * adx_score
+        0.08 * stoch_score +
+        0.07 * adx_score
     )
     
     stock_analysis[i]['Score'] = final_score
@@ -665,16 +684,16 @@ for i, stock in enumerate(stock_analysis):
     stock_analysis[i]['Stoch_Score'] = stoch_score
     stock_analysis[i]['ADX_Score'] = adx_score
     
-    if final_score >= 75:
+    if final_score >= 70:
         signal = "🟢 STRONG BUY"
         signal_class = "signal-buy"
-    elif final_score >= 60:
+    elif final_score >= 55:
         signal = "🟡 BUY"
         signal_class = "signal-buy"
-    elif final_score >= 40:
+    elif final_score >= 45:
         signal = "⚪ HOLD"
         signal_class = "signal-hold"
-    elif final_score >= 25:
+    elif final_score >= 30:
         signal = "🟠 SELL"
         signal_class = "signal-sell"
     else:

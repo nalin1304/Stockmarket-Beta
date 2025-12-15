@@ -283,6 +283,11 @@ if 'stock_data' not in st.session_state:
 if 'last_refresh' not in st.session_state:
     st.session_state.last_refresh = None
 
+if 'data_cache_time' not in st.session_state:
+    st.session_state.data_cache_time = None
+
+DATA_CACHE_MINUTES = 15  # Only refetch if data is older than this
+
 if 'num_stocks' not in st.session_state:
     st.session_state.num_stocks = 25
 
@@ -322,6 +327,8 @@ st.sidebar.markdown("---")
 
 if st.sidebar.button("🔄 Refresh Data", use_container_width=True):
     st.session_state.stock_data = {}
+    st.session_state.data_cache_time = None  # Force refetch
+    st.session_state.ml_model = None  # Retrain model with fresh data
     st.session_state.last_refresh = datetime.now()
     st.rerun()
 
@@ -347,20 +354,40 @@ tab1, tab2, tab3, tab4 = st.tabs([
 ])
 
 with st.spinner("🔄 Fetching live market data from NSE..."):
-    if not st.session_state.stock_data:
+    # Check if we need to refetch (cache expired or empty)
+    cache_valid = (
+        st.session_state.stock_data and 
+        st.session_state.data_cache_time and 
+        (datetime.now() - st.session_state.data_cache_time).total_seconds() < DATA_CACHE_MINUTES * 60
+    )
+    
+    if not cache_valid or not st.session_state.stock_data:
         stock_data_temp = {}
         symbols_to_fetch = NIFTY_STOCKS[:num_stocks]
         
-        # IMPORTANT: Always include portfolio stocks even if not in current analysis range
+        # Always include portfolio stocks
         portfolio_symbols = [f"{sym}.NS" for sym in st.session_state.portfolio.keys()]
         for psym in portfolio_symbols:
             if psym not in symbols_to_fetch:
                 symbols_to_fetch.append(psym)
         
+        # Show progress
+        progress_bar = st.progress(0, text="Downloading stock data...")
+        
         try:
-            # Batch download is MUCH faster than individual requests
-            batch_data = yf.download(symbols_to_fetch, period="1y", group_by='ticker', progress=False, threads=True)
-            for symbol in symbols_to_fetch:
+            # Use 6 months instead of 1 year - faster download, still enough for analysis
+            progress_bar.progress(10, text="Connecting to Yahoo Finance...")
+            batch_data = yf.download(
+                symbols_to_fetch, 
+                period="6mo",  # Reduced from 1y to 6mo for speed
+                group_by='ticker', 
+                progress=False, 
+                threads=True,
+                timeout=30  # 30 second timeout per request
+            )
+            progress_bar.progress(70, text="Processing data...")
+            
+            for idx, symbol in enumerate(symbols_to_fetch):
                 try:
                     if len(symbols_to_fetch) == 1:
                         hist = batch_data
@@ -368,20 +395,32 @@ with st.spinner("🔄 Fetching live market data from NSE..."):
                         hist = batch_data[symbol].dropna()
                     if not hist.empty and len(hist) > 50:
                         stock_data_temp[symbol] = hist
-                except:
+                except Exception:
                     pass
-        except:
-            # Fallback to individual fetch if batch fails
-            for symbol in symbols_to_fetch:
+            
+            progress_bar.progress(100, text="Done!")
+            
+        except Exception as e:
+            progress_bar.progress(20, text="Batch failed, trying individual stocks...")
+            # Fallback: fetch only essential stocks (top 15 + portfolio)
+            essential_symbols = symbols_to_fetch[:15] + [s for s in portfolio_symbols if s not in symbols_to_fetch[:15]]
+            for idx, symbol in enumerate(essential_symbols):
                 try:
+                    progress_bar.progress(20 + int(80 * idx / len(essential_symbols)), text=f"Fetching {symbol.replace('.NS', '')}...")
                     ticker = yf.Ticker(symbol)
-                    hist = ticker.history(period="1y")
+                    hist = ticker.history(period="6mo")
                     if not hist.empty and len(hist) > 50:
                         stock_data_temp[symbol] = hist
-                except:
+                except Exception:
                     pass
-        st.session_state.stock_data = stock_data_temp
-        st.session_state.last_refresh = datetime.now()
+            progress_bar.progress(100, text="Done!")
+        
+        progress_bar.empty()  # Remove progress bar
+        
+        if stock_data_temp:
+            st.session_state.stock_data = stock_data_temp
+            st.session_state.data_cache_time = datetime.now()
+            st.session_state.last_refresh = datetime.now()
 
 stock_data = st.session_state.stock_data
 

